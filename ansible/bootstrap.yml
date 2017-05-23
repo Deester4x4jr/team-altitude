@@ -1,0 +1,45 @@
+---
+- hosts: all
+  tasks:
+    ## Install Ruby, Ruby-Dev, and Build-Essentials
+    - name: Install Ruby, Ruby-Dev, and Build-Essentials
+      apt:
+        pkg: "{{ item }}"
+        state: latest
+        install_recommends: no
+      with_items:
+        - ruby
+        - ruby-dev
+        - build-essential
+    ## Install Bundler
+    - name: Install Bundler
+      gem:
+        name: bundler
+        state: latest
+    ## Install ServerPilot and Colorize Gems
+    - name: Install ServerPilot and Colorize Gems
+      gem:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        - ServerPilot
+        - colorize
+    ## Download the ServerPilot Provisioning Script
+    - name: Download the ServerPilot Provisioning Script
+      get_url:
+        url: https://download.serverpilot.io/serverpilot-installer
+        dest: /home/vagrant/shared/serverpilot/serverpilot-installer.py
+    ## Provision this Server with ServerPilot
+    - name: Provision this Server with ServerPilot
+      command: ruby /home/vagrant/shared/serverpilot/serverpilot-provision-script.rb
+    ## Wait for port 80 to be open
+    - name: Waiting for port 80 to be open
+      wait_for:
+        host: localhost
+        port: 80
+        delay: 15
+        state: drained
+        connect_timeout: 20
+        sleep: 5
+        timeout: 300
+

@@ -2,6 +2,28 @@ require 'ServerPilot'
 require 'logger'
 require 'colorize'
 require 'open-uri'
+require 'socket'
+require 'timeout'
+
+HOST = '127.0.0.1'
+PORT = 80
+TIMEOUT = 600
+REST = 15
+
+def port_open?(ip, port, timeout, rest)
+    start_time = Time.now
+    current_time = start_time
+    while (current_time - start_time) <= timeout
+        begin
+            TCPSocket.new(ip, port)
+            return true
+        rescue Errno::ECONNREFUSED
+            sleep rest
+        end
+        current_time = Time.now
+    end
+    return false
+end
 
 # Create new Logger
 log = Logger.new('/home/vagrant/log.out')
@@ -96,11 +118,11 @@ log.info "Beginning Server Connection Process..."
 
 begin
     # Switch lines below to force an error for testing
-    # action = sp.post_servers 'flo-dev'
+    # action = sp.post_servers 'some-server'
     action = sp.post_servers({name: 'altitude-dev'})
 rescue Exception => e
     log.error e
-    abort
+    abort("ERROR: Please Check the Logs")
 else
     action = action.to_h[:body]['data']
 
@@ -108,38 +130,21 @@ else
     SRVR_KEY = action['apikey'].to_s.chomp
     
     log.info "Success! The server was added to ServerPilot:\n" + ("   server_id => " + SRVR_ID + "\n   server_api_key => " + SRVR_KEY).bold
-
 end
 
-# Step 2: Download the provisioner
-log.info "Downloading the provisioner script..."
-
-begin
-    File.open("#{SHARE_PATH}/serverpilot-installer.py", "wb") do |saved_file|
-        open("https://download.serverpilot.io/serverpilot-installer", "rb") do |read_file|
-            saved_file.write(read_file.read)
-        end
-    end
-rescue Exception => e
-    log.error e
-    abort
-else
-    log.info "Success! We got the file!\n   " + `ls -l #{SHARE_PATH} | grep py`
-end
-
-# Step 3: Execute the provisioner
+# Step 2: Execute the provisioner
 log.info "Executing the provisioner script..."
 begin
     action = `sudo python #{SHARE_PATH}/serverpilot-installer.py --server-id=#{SRVR_ID} --server-apikey=#{SRVR_KEY}`
 rescue Exception => e
     log.error e
-    abort
+    abort("ERROR: Please Check the Logs")
 else
     log.info action
     log.info "The provisioning script has completed seccessfully."
 end
 
-# Step 4: Check for the new system user
+# Step 3: Check for the new system user
 log.info "Checking for the new system user..."
 
 begin
@@ -151,7 +156,7 @@ begin
             action = sp.get_sysusers
         rescue Exception => e
             log.error e
-            abort
+            abort("ERROR: Please Check the Logs")
         else
             action.to_h[:body]['data'].each { |srv|
                 if srv['serverid'] == SRVR_ID
@@ -165,35 +170,43 @@ begin
 
     if count == 6 && !found_user
         log.error "Uh-Oh... We couldn't find the server's sysuser"
-        exit(false)
+        abort("ERROR: Please Check the Logs")
     else
         USR_ID = found_user
         log.info "Success!  This system has been provisioned with ServerPilot!\n" + ("   sysuser_id => " + USR_ID).bold
     end
 end
 
-# Step 5: Create an app so that we can install wordpress
+# Step 4: Create an app so that we can install wordpress
 log.info "Creating a blank App Profile..."
 begin
     # Need to make these variables in the future maybe?
     action = sp.post_apps({name: 'grav', sysuserid: USR_ID, runtime: 'php7.0', domains: ['altitude.dev']})
 rescue Exception => e
     log.error e
-    abort
+    abort("ERROR: Please Check the Logs")
 else
     action = action.to_h[:body]['data']
     APP_ID = action['id']
     log.info "Success! The APP has been created!\n" + ("   app_id => " + APP_ID).bold
 end
 
-# Step 6: Create a DB for the wordpress app
-# log.info "Creating a blank Database..."
-# begin
-#     action = sp.post_dbs({appid: APP_ID, name: "flo-db", user: {name: "flo-wp-admin", password: "Xw#659Z{_w!2r*Hp"}})
-# rescue Exception => e
-#     log.error e
-#     abort
-# else
-#     action = action.to_h[:body]['data']
-#     log.info "Success!  The DB has been created!  We are now ready for Wordpress!\n" +  JSON.pretty_generate(action)
-# end
+# Step 5: Disconnect the server so that we don't run up a huge bill
+if port_open?(HOST, PORT, TIMEOUT, REST)
+    log.info "Nginx is running. Port #{PORT} is open on host #{HOST}"
+    puts 'continue...'
+    # log.info "Disconnecting Server " + SRVR_ID + "..."
+    begin
+    #     action = sp.delete_servers({id: SRVR_ID})
+    # rescue Exception => e
+    #     log.error e
+    #     abort("ERROR: Please Check the Logs")
+    # else
+    #     log.info "Success! The server was removed from ServerPilot!  No Worries... Nginx and Apache are still running."
+    end
+else
+    log.error "Nginx never started.  Check if something else went wrong."
+    abort("ERROR: Please Check the Logs")
+end
+
+exit 0

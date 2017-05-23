@@ -1,0 +1,94 @@
+---
+- hosts: all
+  become: true
+  become_user: serverpilot
+  vars:
+    ## Site Vars
+    site_name: Team Altitude
+    site_url: altitude.dev
+    site_user: serverpilot
+    site_dir: /srv/users/serverpilot/apps/grav/public
+    ## Path Vars
+    usr_bin : /usr/bin
+    grav_bin: "{{ site_dir }}/bin"
+    ## Grav Vars
+    grav_utils:
+      - 'grav'
+      - 'gpm'
+    home_dir: /home/vagrant/shared
+    grav_url: https://getgrav.org/download/core/grav-admin/latest
+    time_zone: US/Mountain
+    app_ver: sp-php7.0
+    plugins:
+      - shoppingcart
+      - sitemap
+      - login
+      - google-maps
+      - login-oauth
+      - import
+      - ganalytics
+      - shoppingcart-stripe
+      - scheduler
+      - backlinks
+  tasks:
+    ## Check that the Site Dir exists
+    - name: Check that the Site Dir exists
+      stat:
+        path: "{{ site_dir }}"
+      register: p
+    ## Fail if the Site Dir does not exist
+    - fail:
+        msg: "The Site Dir is missing!!"
+      when: not p.stat.exists
+    ## Download the Grav Binaries
+    - name: Download the Grav Binaries
+      get_url:
+        url: "{{ grav_url }}"
+        dest: "{{ site_dir }}/grav.zip"
+    ## Extract Grav
+    - name: Extract Grav
+      unarchive:
+        src: "{{ site_dir }}/grav.zip"
+        dest: "{{ site_dir }}"
+        owner: "{{ site_user }}"
+    ## Check that the grav-admin folder exists
+    - name: Check that the grav-admin folder exists
+      stat:
+        path: "{{ site_dir }}/grav-admin"
+      register: u
+    ## Move the contents of grav-admin to the Site Dir
+    - name: Move the contents of grav-admin to the Site Dir
+      shell: mv {{ site_dir }}/grav-admin/* .
+      args:
+        chdir: "{{ site_dir }}/"
+      when: u.stat.exists
+    ## Remove the downloaded .zip file and folder
+    - name: Remove the downloaded .zip file and folder
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ site_dir }}/grav.zip"
+        - "{{ site_dir }}/grav-admin/"
+    ## Symlink bin/grav and bin/gpm to use globally
+    - name: Symlink bin/grav and bin/gpm to use globally
+      file:
+        src: "{{ item.path }}"
+        dest: "{{ item.dest }}"
+        state: link
+      become: true
+      become_user: root
+      with_items:
+        - { path: "{{ grav_bin }}/grav", dest: "{{ usr_bin }}/grav" }
+        - { path: "{{ grav_bin }}/gpm", dest: "{{ usr_bin }}/gpm" }
+    ## Move the .htaccess file into place
+    - name: Move the .htaccess file into place
+      shell: mv {{ site_dir }}/webserver-configs/htaccess* ./.htaccess
+      args:
+        chdir: "{{ site_dir }}/"
+    ## Install Grav plugins
+    - name: Install Grav plugins
+      shell: gpm install {{ plugins | join(' ') }} -y
+      args:
+        chdir: "{{ site_dir }}/"
+

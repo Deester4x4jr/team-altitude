@@ -12,11 +12,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # Optionally, set a custom port for using the same hostname for multiple dev configs
   # config.vm.network 'forwarded_port', guest: 80, host: 5000, auto_correct: true
 
-  config.vm.synced_folder "./app", "/tmp/app/", create: true, id: "app-files"
-  config.vm.synced_folder "./shared", "/home/vagrant/shared/", create: true, id: "shared-files"
-
-  # config.vm.provision "file", source: "./shared/vagrant-notify/notify-send.erb", destination: "/tmp/vagrant-notify/notify-send.erb"
-
   # VM Config options
   config.vm.provider 'virtualbox' do |v|
     v.name = 'Altitude Dev Box'
@@ -24,65 +19,33 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     v.customize ['modifyvm', :id, '--cableconnected1', 'on']
   end
 
-  # config.vm.provider :digital_ocean do |provider, override|
-  #   override.ssh.private_key_path = '~/.ssh/id_rsa'
-  #   override.vm.box_url = 'https://github.com/smdahlen/vagrant-digitalocean/raw/master/box/digital_ocean.box'
+  # Set BindFS defaults for serverpilot
+  config.bindfs.default_options = {
+    force_user:   'serverpilot',
+    force_group:  'serverpilot',
+    perms:        'u=rwX:g=rX:o=rX'
+  }
 
-  #   provider.client_id = 'YOUR_DIGITALOCEAN_CLIENT_ID'
-  #   provider.api_key = 'YOUR_DIGITALOCEAN_API_KEY'
+  # Config Synced Folders
+  config.vm.synced_folder "./shared", "/home/vagrant/shared/", create: true, id: "shared-files"
+  config.vm.synced_folder "./app", "/tmp-app-dir", create: true, id: "app-files"
+  config.bindfs.bind_folder "/tmp-app-dir", "/srv/users/serverpilot/apps/grav/public/", after: :provision, o: 'nonempty'
 
-  #   provider.image = 'Ubuntu 12.04.3 x64'
-  #   provider.region = 'New York 2'
-  #   provider.size = '512MB'
-  # end
+  # NOT SURE ABOUT THIS
+  # config.vm.provision "file", source: "./shared/vagrant-notify/notify-send.erb", destination: "/tmp/vagrant-notify/notify-send.erb"
 
-  # Update APT and install Puppet
-  config.vm.provision :shell,
-    inline: "sudo apt-get update -y && sudo apt-get install puppet -y --no-install-recommends"
-
-  # config.vm.provision :reload
-
-  # puppet stage 1: Provision with ServerPilot
-  config.vm.provision :puppet do |puppet|
-    puppet.manifests_path = "manifests"
-    puppet.manifest_file  = "init.pp"
-
-    puppet.module_path = "./modules"
-    puppet.options = "--verbose"
+  # BootStrapping with Ansible
+  config.vm.provision 'bootstrap', type: :ansible_local do |ansible|
+    ansible.playbook = 'ansible/bootstrap.yml'
+    ansible.sudo = true
   end
 
-  # Shell Provisioner
-  # NEED TO BUILD THIS OUT - SHOULD DO THE FOLLOWING:
-  # - ln -s [webDirs] --> [userDirs]
-  # - yadda
-  # - yadda
-  # - ln -s [webDirs] --> [userDirs]
-  # config.vm.provision "shell", path: "provision/setup.sh"
+  # Reload once to confirm that the serverpilot provisioner is complete
+  config.vm.provision :reload
 
-  # config.vm.provision :reload
-
-  # puppet stage 2: Configure WordPress
-  config.vm.provision :puppet do |puppet|
-    puppet.manifests_path = "manifests"
-    puppet.manifest_file  = "wp_init.pp"
-
-    puppet.module_path = "./modules"
-    puppet.options = "--verbose"
+  # Gravifying with Ansible
+  config.vm.provision 'gravify', type: :ansible_local do |ansible|
+    ansible.playbook = 'ansible/gravify.yml'
+    ansible.sudo = true
   end
-
-  # config.vm.provision :reload
-
-  # Sync the local theme folder to the wordpress theme folder
-  # config.vm.synced_folder "./app/theme", "/srv/users/serverpilot/apps/wordpress/public/wp-content/themes/flo-theme-2017", create: true, id: "theme-files"
-
-  # puppet stage 3: WordPress Details
-  # config.vm.provision :puppet do |puppet|
-  #   puppet.manifests_path = "manifests"
-  #   puppet.manifest_file  = "flo_init.pp"
-
-  #   puppet.module_path = "./modules"
-  #   puppet.options = "--verbose"
-  # end
-
-  # config.vm.provision :reload
 end

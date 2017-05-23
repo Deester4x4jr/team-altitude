@@ -1,0 +1,11 @@
+email: josh@altitudewc.com
+fullname: 'Josh DeSherlia'
+title: Admin
+state: enabled
+access:
+  admin:
+    login: true
+    super: true
+  site:
+    login: true
+hashed_password: $2y$10$TFPMTqGFKAtF0FlYTnHBPuoL.SvzQJiMQmmudkd.0YiS82SYyx8xi
